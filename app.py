@@ -68,7 +68,7 @@ def sidebar_configuration():
             st.info(f"📊 Documents in database: {stats.get('total_documents', 'Unknown')}")
         
         # Clear database button
-        if st.button("🗑️ Clear Database", type="secondary"):
+        if st.button("🗑Clear Database", type="secondary"):
             try:
                 if st.session_state.rag_pipeline.clear_database():
                     st.success("Database cleared successfully!")
@@ -80,7 +80,7 @@ def sidebar_configuration():
         st.divider()
         
         # Processing settings
-        st.subheader("⚙️ Processing Settings")
+        st.subheader("Processing Settings")
         chunk_size = st.slider("Chunk Size", 500, 2000, 1000, 100)
         chunk_overlap = st.slider("Chunk Overlap", 50, 500, 200, 50)
         
@@ -109,7 +109,7 @@ def document_upload_section():
             st.write(f"- {file.name} ({file.size / 1024 / 1024:.1f} MB)")
         
         # Process documents button
-        if st.button("🔄 Process Documents", type="primary"):
+        if st.button("Process Documents", type="primary"):
             with st.spinner("Processing documents... This may take a few minutes."):
                 try:
                     start_time = time.time()
@@ -197,39 +197,28 @@ def qa_section(openai_key):
             horizontal=True
         )
     
-    # Ask question button
-    if question and st.button("🔍 Get Answer", type="primary"):
+    if question and st.button("Get Answer", type="primary"):
         with st.spinner("Searching for answer..."):
             try:
                 if search_type == "Q&A with AI":
-                    # Full Q&A with LLM
                     result = st.session_state.rag_pipeline.ask_question(question)
                     
-                    # Display answer
-                    st.subheader("💬 Answer:")
+                    # Clean answer display without sources
+                    st.subheader("Answer:")
                     st.write(result["answer"])
                     
-                    # Display sources
-                    st.subheader("📖 Sources:")
-                    formatted_sources = format_sources(result["sources"])
-                    
-                    for source in formatted_sources:
-                        with st.expander(f"📄 Source {source['id']} - {source['metadata'].get('source_file', 'Unknown')}"):
-                            st.write(source["full_content"])
-                            if source["metadata"]:
-                                st.json(source["metadata"])
+                    # Optional: Show just the number of sources used
+                    st.caption(f"Answer based on {result['num_sources']} relevant sections from your documents")
                 
                 else:
                     # Similarity search only
-                    results = st.session_state.rag_pipeline.similarity_search(question, k=5)
+                    results = st.session_state.rag_pipeline.similarity_search(question, k=3)
                     
-                    st.subheader("🔍 Similar Documents:")
-                    for i, doc in enumerate(results):
-                        with st.expander(f"📄 Result {i+1} - {doc.metadata.get('source_file', 'Unknown')}"):
-                            st.write(doc.page_content)
-                            if doc.metadata:
-                                st.json(doc.metadata)
-                
+                    st.subheader("Most Relevant Sections:")
+                    for i, doc in enumerate(results, 1):
+                        with st.expander(f"Section {i}"):
+                            st.write(doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content)
+            
             except Exception as e:
                 st.error(f"Error getting answer: {format_error_message(e)}")
     
