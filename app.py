@@ -213,8 +213,13 @@ def qa_section(openai_key):
     # Setup QA chain
     try:
         st.session_state.rag_pipeline.setup_qa_chain(openai_key)
+        if not st.session_state.rag_pipeline.qa_chain:
+            st.error("❌ Failed to setup Q&A system. Please check your OpenAI API key and billing status.")
+            st.info("💡 You can still use 'Similarity Search Only' to test the document retrieval system.")
+            return
     except Exception as e:
         st.error(f"Error setting up Q&A system: {format_error_message(e)}")
+        st.info("💡 Try using 'Similarity Search Only' instead.")
         return
     
     # Display conversation history
