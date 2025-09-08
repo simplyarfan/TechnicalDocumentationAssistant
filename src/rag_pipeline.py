@@ -78,37 +78,39 @@ class RAGPipeline:
             return False
     
     def setup_qa_chain(self, openai_api_key: str, temperature: float = 0):
-        """Setup QA chain with improved prompt and retrieval"""
+        """Setup QA chain with better error handling"""
         if not self.vectorstore:
             raise ValueError("Vector store not initialized. Create or load vector store first.")
-        
+    
         try:
+            # First, test if the API key works
             import openai
             openai.api_key = openai_api_key
+            
+            # Try a simple test call to validate the key
+            try:
+                openai.Model.list()
+            except Exception as api_error:
+                print(f"API key validation failed: {str(api_error)}")
+                self.qa_chain = None
+                return
             
             from langchain.llms import OpenAI
             
             llm = OpenAI(
                 temperature=temperature,
                 openai_api_key=openai_api_key,
-                max_tokens=300  # Increased for better answers
+                max_tokens=300
             )
             
-            # Improved prompt template
-            prompt_template = """You are a helpful assistant that answers questions based on the provided context. Use the context below to answer the question accurately and completely.
+            prompt_template = """You are a helpful assistant that answers questions based on the provided context.
 
 Context:
 {context}
 
 Question: {question}
 
-Instructions:
-- Answer based only on the information provided in the context
-- Be specific and detailed in your response
-- If the answer requires information from multiple parts of the context, combine them
-- If you cannot find the answer in the context, say "I cannot find this information in the provided document"
-
-Answer:"""
+Answer based only on the information in the context above:"""
             
             PROMPT = PromptTemplate(
                 template=prompt_template, 
@@ -123,9 +125,34 @@ Answer:"""
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
+            print("QA chain setup successful")
+            
         except Exception as e:
             print(f"Error in setup_qa_chain: {str(e)}")
             self.qa_chain = None
+            raise Exception(f"Failed to setup QA chain: Please check your API key and billing status")
+    
+    def ask_question(self, question: str) -> Dict[str, Any]:
+        if not self.qa_chain:
+            raise ValueError("QA chain not set up properly.")
+        
+        if not question.strip():
+            raise ValueError("Question cannot be empty")
+        
+        try:
+            result = self.qa_chain({"query": question})
+            
+            response = {
+                "question": question,
+                "answer": result["result"],
+                "sources": result["source_documents"],
+                "num_sources": len(result["source_documents"])
+            }
+            
+            return response
+            
+        except Exception as e:
+            raise Exception(f"Failed to get answer: {str(e)}")
     
     def ask_question(self, question: str) -> Dict[str, Any]:
         if not self.qa_chain:
