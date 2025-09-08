@@ -1,7 +1,8 @@
 import os
 from typing import List, Dict, Any
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
 from langchain.prompts import PromptTemplate
@@ -86,45 +87,45 @@ class RAGPipeline:
             return False
     
     def setup_qa_chain(self, openai_api_key: str, temperature: float = 0):
-        """Setup the question-answering chain"""
+        """Setup the question-answering chain using ChatOpenAI"""
         if not self.vectorstore:
             raise ValueError("Vector store not initialized. Create or load vector store first.")
-    
-        try:
-            from langchain_openai import ChatOpenAI
         
+        try:
+            # Use ChatOpenAI with explicit parameters
             llm = ChatOpenAI(
-                temperature=temperature,
-                api_key=openai_api_key,  # Updated parameter name
                 model="gpt-3.5-turbo",
+                temperature=temperature,
+                api_key=openai_api_key,
                 max_tokens=500
             )
-        
-            prompt_template = """Use the following pieces of context from technical documentation to answer the question. 
+            
+            # Create custom prompt
+            prompt_template = """Use the following pieces of context from technical documentation to answer the question at the end. 
             If you don't know the answer based on the context provided, just say "I don't have enough information in the provided documentation to answer this question."
 
-            Context:
             {context}
 
             Question: {question}
-
-            Answer: """
-        
-            prompt = PromptTemplate(
-                template=prompt_template,
+            Answer:"""
+            
+            PROMPT = PromptTemplate(
+                template=prompt_template, 
                 input_variables=["context", "question"]
             )
-        
+            
+            # Create QA chain
             self.qa_chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
                 retriever=self.retriever,
                 return_source_documents=True,
-                chain_type_kwargs={"prompt": prompt}
+                chain_type_kwargs={"prompt": PROMPT}
             )
-        
+            
         except Exception as e:
-            raise Exception(f"Failed to setup QA chain: {format_error_message(e)}")
+            print(f"Error in setup_qa_chain: {str(e)}")
+            raise Exception(f"Failed to setup QA chain: {str(e)}")
     
     def ask_question(self, question: str) -> Dict[str, Any]:
         """Ask a question and get answer with sources"""
@@ -135,7 +136,8 @@ class RAGPipeline:
             raise ValueError("Question cannot be empty")
         
         try:
-            result = self.qa_chain.invoke({"query": question})  # Updated method name
+            # Use invoke method for newer LangChain versions
+            result = self.qa_chain.invoke({"query": question})
             
             response = {
                 "question": question,
@@ -147,7 +149,8 @@ class RAGPipeline:
             return response
             
         except Exception as e:
-            raise Exception(f"Failed to get answer: {format_error_message(e)}")
+            print(f"Error in ask_question: {str(e)}")
+            raise Exception(f"Failed to get answer: {str(e)}")
     
     def similarity_search(self, query: str, k: int = 5) -> List[Document]:
         """Perform similarity search without LLM"""
