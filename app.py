@@ -1,9 +1,12 @@
 import streamlit as st
 import os
 import time
+import uuid
+from datetime import datetime
 from dotenv import load_dotenv
 from src.document_processor import DocumentProcessor
 from src.rag_pipeline import RAGPipeline
+from src.database import SessionDatabase
 from src.utils import (
     validate_api_key, 
     display_metrics, 
@@ -17,7 +20,7 @@ load_dotenv()
 
 # Page configuration
 st.set_page_config(
-    page_title="Technical Documentation Assistant",
+    page_title="SimpleDocs - Technical Documentation Assistant",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -36,6 +39,21 @@ def initialize_session_state():
     
     if "processing_stats" not in st.session_state:
         st.session_state.processing_stats = {}
+    
+    # Add conversation history
+    if "conversation_history" not in st.session_state:
+        st.session_state.conversation_history = []
+    
+    # Add session metadata
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    
+    if "session_start_time" not in st.session_state:
+        st.session_state.session_start_time = datetime.now()
+    
+    # Add database
+    if "db" not in st.session_state:
+        st.session_state.db = SessionDatabase()
 
 def sidebar_configuration():
     """Setup sidebar with configuration options"""
@@ -59,6 +77,14 @@ def sidebar_configuration():
         
         st.divider()
         
+        # Session info
+        st.subheader("📊 Current Session")
+        st.write(f"**Session ID:** {st.session_state.session_id[:8]}...")
+        st.write(f"**Started:** {st.session_state.session_start_time.strftime('%H:%M:%S')}")
+        st.write(f"**Questions Asked:** {len(st.session_state.conversation_history)}")
+        
+        st.divider()
+        
         # Database management
         st.subheader("🗃️ Database Management")
         
@@ -68,7 +94,7 @@ def sidebar_configuration():
             st.info(f"📊 Documents in database: {stats.get('total_documents', 'Unknown')}")
         
         # Clear database button
-        if st.button("🗑Clear Database", type="secondary"):
+        if st.button("🗑️ Clear Database", type="secondary"):
             try:
                 if st.session_state.rag_pipeline.clear_database():
                     st.success("Database cleared successfully!")
@@ -79,8 +105,16 @@ def sidebar_configuration():
         
         st.divider()
         
+        # Analytics
+        st.subheader("📈 Analytics")
+        if st.button("View Usage Analytics"):
+            analytics = st.session_state.db.get_session_analytics()
+            st.json(analytics)
+        
+        st.divider()
+        
         # Processing settings
-        st.subheader("Processing Settings")
+        st.subheader("⚙️ Processing Settings")
         chunk_size = st.slider("Chunk Size", 500, 2000, 1000, 100)
         chunk_overlap = st.slider("Chunk Overlap", 50, 500, 200, 50)
         
@@ -109,7 +143,7 @@ def document_upload_section():
             st.write(f"- {file.name} ({file.size / 1024 / 1024:.1f} MB)")
         
         # Process documents button
-        if st.button("Process Documents", type="primary"):
+        if st.button("🔄 Process Documents", type="primary"):
             with st.spinner("Processing documents... This may take a few minutes."):
                 try:
                     start_time = time.time()
@@ -132,6 +166,15 @@ def document_upload_section():
                             "processing_time": processing_time
                         }
                         
+                        # Save session to database
+                        st.session_state.db.save_session({
+                            "session_id": st.session_state.session_id,
+                            "start_time": st.session_state.session_start_time.isoformat(),
+                            "documents_processed": 1,
+                            "total_questions": len(st.session_state.conversation_history),
+                            "processing_stats": st.session_state.processing_stats
+                        })
+                        
                         # Display success message and metrics
                         st.success("✅ Documents processed successfully!")
                         display_metrics(
@@ -152,7 +195,7 @@ def document_upload_section():
                     st.error(f"Error processing documents: {format_error_message(e)}")
 
 def qa_section(openai_key):
-    """Handle question-answering functionality"""
+    """Handle question-answering with conversation history"""
     st.header("❓ 2. Ask Questions")
     
     if not openai_key:
@@ -174,59 +217,123 @@ def qa_section(openai_key):
         st.error(f"Error setting up Q&A system: {format_error_message(e)}")
         return
     
+    # Display conversation history
+    if st.session_state.conversation_history:
+        with st.expander(f"💬 Conversation History ({len(st.session_state.conversation_history)} questions)", expanded=False):
+            for i, item in enumerate(st.session_state.conversation_history):
+                st.write(f"**Q{i+1}:** {item['question']}")
+                st.write(f"**A{i+1}:** {item['answer'][:200]}{'...' if len(item['answer']) > 200 else ''}")
+                st.caption(f"Asked at {item['timestamp'][:19]} • {item['search_type']}")
+                if i < len(st.session_state.conversation_history) - 1:
+                    st.write("---")
+    
     # Sample questions
     with st.expander("💡 Sample Questions"):
         sample_questions = get_sample_questions()
+        col1, col2 = st.columns(2)
         for i, question in enumerate(sample_questions):
-            if st.button(question, key=f"sample_{i}"):
+            col = col1 if i % 2 == 0 else col2
+            if col.button(question, key=f"sample_{i}"):
                 st.session_state.current_question = question
     
-    # Question input
+    # Question input with context awareness
     question = st.text_input(
         "Ask a question about your documents:",
         value=st.session_state.get("current_question", ""),
-        placeholder="e.g., How do I authenticate with this API?"
+        placeholder="e.g., Based on our previous discussion, what were the specific recommendations?"
     )
     
     # Search options
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        search_type = st.radio(
-            "Search type:",
-            ["Q&A with AI", "Similarity Search Only"],
-            horizontal=True
-        )
+    search_type = st.radio(
+        "Search type:",
+        ["Q&A with AI", "Similarity Search Only"],
+        horizontal=True
+    )
     
-    if question and st.button("Get Answer", type="primary"):
+    # Ask question button
+    if question and st.button("🔍 Get Answer", type="primary"):
         with st.spinner("Searching for answer..."):
             try:
+                # Build context from conversation history
+                context_prompt = ""
+                if st.session_state.conversation_history:
+                    recent_qa = st.session_state.conversation_history[-2:]  # Last 2 Q&As for context
+                    context_prompt = "\n\nPrevious conversation context:\n"
+                    for qa in recent_qa:
+                        context_prompt += f"Q: {qa['question']}\nA: {qa['answer'][:100]}...\n"
+                
                 if search_type == "Q&A with AI":
-                    result = st.session_state.rag_pipeline.ask_question(question)
+                    # Enhance question with context if needed
+                    enhanced_question = question
+                    if context_prompt and any(word in question.lower() for word in ['this', 'that', 'they', 'it', 'previous', 'mentioned']):
+                        enhanced_question = f"{question}{context_prompt}"
                     
-                    # Clean answer display without sources
-                    st.subheader("Answer:")
+                    result = st.session_state.rag_pipeline.ask_question(enhanced_question)
+                    
+                    # Display answer
+                    st.subheader("💬 Answer:")
                     st.write(result["answer"])
-                    
-                    # Optional: Show just the number of sources used
                     st.caption(f"Answer based on {result['num_sources']} relevant sections from your documents")
+                    
+                    # Store in conversation history
+                    conversation_item = {
+                        "question": question,
+                        "answer": result["answer"],
+                        "timestamp": datetime.now().isoformat(),
+                        "sources_count": result['num_sources'],
+                        "search_type": "Q&A with AI"
+                    }
+                    st.session_state.conversation_history.append(conversation_item)
+                    
+                    # Save to database
+                    st.session_state.db.save_conversation(st.session_state.session_id, conversation_item)
                 
                 else:
-                    # Similarity search only
+                    # Similarity search
                     results = st.session_state.rag_pipeline.similarity_search(question, k=3)
                     
-                    st.subheader("Most Relevant Sections:")
+                    st.subheader("🔍 Most Relevant Sections:")
                     for i, doc in enumerate(results, 1):
-                        with st.expander(f"Section {i}"):
+                        with st.expander(f"📄 Section {i}"):
                             st.write(doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content)
-            
+                    
+                    # Store in conversation history
+                    conversation_item = {
+                        "question": question,
+                        "answer": f"Found {len(results)} relevant sections",
+                        "timestamp": datetime.now().isoformat(),
+                        "sources_count": len(results),
+                        "search_type": "Similarity Search"
+                    }
+                    st.session_state.conversation_history.append(conversation_item)
+                    
+                    # Save to database
+                    st.session_state.db.save_conversation(st.session_state.session_id, conversation_item)
+                
+                # Update session in database
+                st.session_state.db.save_session({
+                    "session_id": st.session_state.session_id,
+                    "start_time": st.session_state.session_start_time.isoformat(),
+                    "documents_processed": 1 if st.session_state.documents_processed else 0,
+                    "total_questions": len(st.session_state.conversation_history),
+                    "processing_stats": st.session_state.processing_stats
+                })
+                
             except Exception as e:
                 st.error(f"Error getting answer: {format_error_message(e)}")
     
-    # Clear current question
-    if st.button("🔄 Clear Question"):
-        if "current_question" in st.session_state:
-            del st.session_state.current_question
-        st.rerun()
+    # Action buttons
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("🔄 Clear Question"):
+            if "current_question" in st.session_state:
+                del st.session_state.current_question
+            st.rerun()
+    
+    with col2:
+        if st.button("🗑️ Clear Conversation"):
+            st.session_state.conversation_history = []
+            st.rerun()
 
 def main():
     """Main application function"""
@@ -234,10 +341,10 @@ def main():
     initialize_session_state()
     
     # Header
-    st.title("📚 Technical Documentation Assistant")
+    st.title("📚 SimpleDocs")
     st.markdown("""
-    Upload technical documents and ask questions using **Retrieval-Augmented Generation (RAG)**.
-    Powered by LangChain, OpenAI, and HuggingFace embeddings.
+    **Simple, powerful documentation search with AI.**
+    Upload technical documents and get instant answers using Retrieval-Augmented Generation (RAG).
     """)
     
     # Sidebar configuration
@@ -254,18 +361,20 @@ def main():
     st.divider()
     with st.expander("ℹ️ About This Application"):
         st.markdown("""
-        **Technical Documentation Assistant** is a RAG-based system that helps you:
+        **SimpleDocs** is a RAG-based system that helps you:
         
         - 📄 **Process PDF documents** into searchable chunks
         - 🔍 **Semantic search** using HuggingFace embeddings  
-        - 🤖 **AI-powered Q&A** using OpenAI's language models
-        - 📚 **Source tracking** to see where answers come from
+        - 🤖 **AI-powered Q&A** with conversation history
+        - 📚 **Session tracking** for usage analytics
+        - 💬 **Context-aware responses** using previous conversations
         
         **Technologies used:**
         - **LangChain** for document processing and RAG pipeline
-        - **ChromaDB** for vector storage
+        - **FAISS** for vector storage
         - **HuggingFace** for text embeddings
         - **OpenAI** for language generation
+        - **SQLite** for session and conversation storage
         - **Streamlit** for the web interface
         """)
 
