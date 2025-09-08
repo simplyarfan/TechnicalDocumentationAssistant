@@ -91,41 +91,41 @@ class RAGPipeline:
         if not self.vectorstore:
             raise ValueError("Vector store not initialized. Create or load vector store first.")
     
-    try:
-        from langchain_openai import ChatOpenAI
+        try:
+            from langchain_openai import ChatOpenAI
         
-        llm = ChatOpenAI(
-            temperature=temperature,
-            api_key=openai_api_key,  # Updated parameter name
-            model="gpt-3.5-turbo",
-            max_tokens=500
-        )
+            llm = ChatOpenAI(
+                temperature=temperature,
+                api_key=openai_api_key,  # Updated parameter name
+                model="gpt-3.5-turbo",
+                max_tokens=500
+            )
         
-        prompt_template = """Use the following pieces of context from technical documentation to answer the question. 
-        If you don't know the answer based on the context provided, just say "I don't have enough information in the provided documentation to answer this question."
+            prompt_template = """Use the following pieces of context from technical documentation to answer the question. 
+            If you don't know the answer based on the context provided, just say "I don't have enough information in the provided documentation to answer this question."
 
-        Context:
-        {context}
+            Context:
+            {context}
 
-        Question: {question}
+            Question: {question}
 
-        Answer: """
+            Answer: """
         
-        prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
-        )
+            prompt = PromptTemplate(
+                template=prompt_template,
+                input_variables=["context", "question"]
+            )
         
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=self.retriever,
-            return_source_documents=True,
-            chain_type_kwargs={"prompt": prompt}
-        )
+            self.qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=self.retriever,
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": prompt}
+            )
         
-    except Exception as e:
-        raise Exception(f"Failed to setup QA chain: {format_error_message(e)}")
+        except Exception as e:
+            raise Exception(f"Failed to setup QA chain: {format_error_message(e)}")
     
     def ask_question(self, question: str) -> Dict[str, Any]:
         """Ask a question and get answer with sources"""
