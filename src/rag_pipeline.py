@@ -42,7 +42,7 @@ class RAGPipeline:
             
             self.retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 3}
+                search_kwargs={"k": 5}  # Increased for better context
             )
             
             return {
@@ -68,7 +68,7 @@ class RAGPipeline:
             
             self.retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 3}
+                search_kwargs={"k": 5}
             )
             
             return True
@@ -78,22 +78,22 @@ class RAGPipeline:
             return False
     
     def setup_qa_chain(self, openai_api_key: str, temperature: float = 0):
-        """Setup QA chain with better prompt and retrieval"""
+        """Setup QA chain with improved prompt and retrieval"""
         if not self.vectorstore:
             raise ValueError("Vector store not initialized. Create or load vector store first.")
-    
+        
         try:
             import openai
             openai.api_key = openai_api_key
-        
+            
             from langchain.llms import OpenAI
-        
+            
             llm = OpenAI(
                 temperature=temperature,
                 openai_api_key=openai_api_key,
-                max_tokens=200  # Increased for better answers
+                max_tokens=300  # Increased for better answers
             )
-        
+            
             # Improved prompt template
             prompt_template = """You are a helpful assistant that answers questions based on the provided context. Use the context below to answer the question accurately and completely.
 
@@ -109,18 +109,12 @@ Instructions:
 - If you cannot find the answer in the context, say "I cannot find this information in the provided document"
 
 Answer:"""
-        
+            
             PROMPT = PromptTemplate(
                 template=prompt_template, 
                 input_variables=["context", "question"]
             )
-        
-            # Better retriever settings
-            self.retriever = self.vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": 5}  # Increased from 3 to get more context
-            )
-        
+            
             self.qa_chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
@@ -128,7 +122,7 @@ Answer:"""
                 return_source_documents=True,
                 chain_type_kwargs={"prompt": PROMPT}
             )
-        
+            
         except Exception as e:
             print(f"Error in setup_qa_chain: {str(e)}")
             self.qa_chain = None

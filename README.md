@@ -1,8 +1,8 @@
-# SimpleDocs
+# 📚 Technical Documentation Assistant
 
 A powerful RAG (Retrieval-Augmented Generation) system for querying technical documentation using LangChain, OpenAI, and Streamlit.
 
-## Features
+## ✨ Features
 
 - **PDF Document Processing**: Upload and process multiple PDF files
 - **Semantic Search**: Find relevant information using HuggingFace embeddings
@@ -11,7 +11,7 @@ A powerful RAG (Retrieval-Augmented Generation) system for querying technical do
 - **Interactive Web Interface**: Easy-to-use Streamlit interface
 - **Vector Database**: Persistent storage with ChromaDB
 
-## Technologies Used
+## 🚀 Technologies Used
 
 - **LangChain** - Document processing and RAG pipeline
 - **OpenAI** - Language model for generating answers
@@ -20,13 +20,13 @@ A powerful RAG (Retrieval-Augmented Generation) system for querying technical do
 - **Streamlit** - Web interface
 - **PyPDF2** - PDF processing
 
-## Prerequisites
+## 📋 Prerequisites
 
 - Python 3.8 or higher
 - OpenAI API key
 - Git (for cloning)
 
-## Installation
+## 🛠️ Installation
 
 1. **Clone the repository:**
 ```bash
