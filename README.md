@@ -26,9 +26,9 @@ A powerful RAG (Retrieval-Augmented Generation) system for querying technical do
 - OpenAI API key
 - Git (for cloning)
 
-## 🛠Installation
+## Installation:
 
-1. **Clone the repository:**
+**Clone the repository:**
 ```bash
 git clone <your-repo-url>
 cd technical-docs-assistant
